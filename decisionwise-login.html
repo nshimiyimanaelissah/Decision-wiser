@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="theme-color" content="#102a43">
+<title>Sign In | DecisionWise</title>
+<style>
+:root{--navy:#102a43;--teal:#087f6e;--tealDark:#066354;--mint:#dff7ef;--ink:#172b3a;--muted:#617381;--line:#dce5eb;--surface:#f4f8fa;--danger:#a62929}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:var(--surface);color:var(--ink);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55}a{color:var(--tealDark);text-decoration:none}a:hover{text-decoration:underline}button,input{font:inherit}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #54c5ad;outline-offset:3px}.header{height:76px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center}.container{width:min(1120px,calc(100% - 36px));margin:0 auto}.header-inner{display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:11px;color:var(--navy);font-weight:850;font-size:1.16rem;letter-spacing:-.04em}.brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:var(--mint);color:var(--tealDark)}.brand-mark svg{width:25px;height:25px}.back-link{font-weight:700;font-size:.9rem}.layout{width:min(1000px,calc(100% - 36px));margin:52px auto;display:grid;grid-template-columns:.95fr 1.05fr;background:white;border:1px solid var(--line);border-radius:24px;overflow:hidden;box-shadow:0 22px 70px rgba(16,42,67,.09);min-height:600px}.welcome{background:linear-gradient(145deg,var(--navy),#0c625b);padding:48px 40px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}.welcome:after{content:"";position:absolute;width:330px;height:330px;border:1px solid #ffffff20;border-radius:50%;right:-170px;top:90px;box-shadow:0 0 0 42px #ffffff08,0 0 0 84px #ffffff06}.welcome-content,.welcome-foot{position:relative;z-index:1}.eyebrow{font-size:.74rem;letter-spacing:.13em;text-transform:uppercase;font-weight:800;color:#9ee7d4}.welcome h1{font-size:clamp(2.2rem,4vw,3.2rem);line-height:1.08;letter-spacing:-.055em;margin:18px 0}.welcome p{color:#d5e5ec;max-width:390px}.benefits{display:grid;gap:15px;margin-top:35px}.benefit{display:flex;align-items:flex-start;gap:12px;color:#e8f3f6;font-size:.9rem}.benefit svg{width:20px;height:20px;color:#9ee7d4;flex-shrink:0;margin-top:2px}.welcome-foot{color:#c4d8e1;font-size:.78rem;margin-top:40px}.form-side{padding:43px clamp(25px,5vw,58px);display:flex;flex-direction:column;justify-content:center}.form-side h2{font-size:1.85rem;letter-spacing:-.045em;color:var(--navy);margin:0 0 7px}.subhead{color:var(--muted);font-size:.92rem;margin:0 0 26px}.form-group{margin-bottom:17px}.form-label{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:7px;color:#263f50;font-size:.86rem;font-weight:750}.field-wrap{position:relative}.field-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:#7b8b96;pointer-events:none}.field{width:100%;min-height:49px;padding:12px 14px 12px 42px;border:1px solid #cfdbe2;border-radius:11px;background:white;color:var(--ink);outline:none;transition:border .15s,box-shadow .15s}.field:focus{border-color:var(--teal);box-shadow:0 0 0 3px #087f6e1c}.password-field{padding-right:78px}.toggle-password{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;padding:7px;color:var(--tealDark);font-size:.8rem;font-weight:800;cursor:pointer}.row-between{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:3px 0 20px;font-size:.84rem}.remember{display:flex;align-items:center;gap:8px;color:#526472}.remember input{width:16px;height:16px;accent-color:var(--teal)}.primary{width:100%;min-height:49px;border:0;border-radius:11px;background:var(--teal);color:white;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;transition:background .15s,transform .15s}.primary:hover{background:var(--tealDark);transform:translateY(-1px)}.primary:disabled{opacity:.65;cursor:wait;transform:none}.primary svg{width:18px;height:18px}.message{display:none;border-radius:10px;padding:11px 13px;font-size:.84rem;margin-bottom:16px}.message.show{display:block}.message.error{background:#fff0f0;color:var(--danger);border:1px solid #ffd1d1}.message.info{background:#edf6fb;color:#235b83;border:1px solid #cfe4f0}.message.success{background:#e9f8f1;color:#086b50;border:1px solid #c6ebdc}.signup{margin-top:22px;text-align:center;font-size:.88rem;color:var(--muted)}.divider{display:flex;align-items:center;gap:12px;color:#82909a;font-size:.77rem;margin:23px 0}.divider:before,.divider:after{content:"";height:1px;flex:1;background:var(--line)}.security-note{display:flex;align-items:flex-start;gap:9px;color:#687a86;font-size:.76rem;line-height:1.5;margin-top:23px}.security-note svg{width:17px;height:17px;color:var(--teal);flex-shrink:0}.footer{padding:0 18px 25px;text-align:center;color:#84939d;font-size:.76rem}.footer a{color:#5b6d79}.small-note{font-size:.75rem;color:#758692;margin-top:13px}@media(max-width:800px){.layout{grid-template-columns:1fr;max-width:540px;margin:28px auto}.welcome{padding:28px 28px 25px}.welcome h1{font-size:2rem}.welcome p{margin-bottom:0}.benefits{display:none}.welcome-foot{margin-top:20px}.form-side{padding:34px 28px 38px}}@media(max-width:480px){.container,.layout{width:calc(100% - 24px)}.header{height:67px}.layout{margin:18px auto;border-radius:18px}.welcome{padding:25px 22px}.welcome h1{font-size:1.85rem}.form-side{padding:28px 21px 30px}.row-between{font-size:.8rem}}
+</style>
+</head>
+<body>
+<header class="header"><div class="container header-inner">
+<a class="brand" href="index.html" aria-label="DecisionWise home"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M7 5h5a4 4 0 0 1 4 4M17.5 7 14 12M10.5 17 7 8"/></svg></span>DecisionWise</a>
+<a class="back-link" href="index.html">← Back to homepage</a>
+</div></header>
+<main class="layout">
+<aside class="welcome"><div class="welcome-content">
+<div class="eyebrow">Understand. Decide. Move Forward.</div><h1>Welcome back to clearer decisions.</h1>
+<p>Sign in to continue your work, revisit saved decisions, and manage your support requests in one place.</p>
+<div class="benefits">
+<div class="benefit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg><span>Keep your saved decisions organized.</span></div>
+<div class="benefit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></svg><span>Access your account through a secure service.</span></div>
+<div class="benefit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/></svg><span>Follow up on CITA Agency support requests.</span></div>
+</div></div><div class="welcome-foot">Your choices remain yours. DecisionWise is here to help you think them through.</div></aside>
+<section class="form-side" aria-labelledby="formTitle">
+<h2 id="formTitle">Sign in to your account</h2><p class="subhead">Enter your account details below.</p>
+<div id="formMessage" class="message" role="status" aria-live="polite"></div>
+<form id="loginForm" novalidate>
+<div class="form-group"><label class="form-label" for="email">Email address</label><div class="field-wrap">
+<svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+<input class="field" id="email" name="email" type="email" autocomplete="username" placeholder="you@example.com" required maxlength="254"></div></div>
+<div class="form-group"><label class="form-label" for="password"><span>Password</span><a href="forgot-password.html">Forgot password?</a></label><div class="field-wrap">
+<svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+<input class="field password-field" id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+<button class="toggle-password" id="togglePassword" type="button" aria-label="Show password" aria-pressed="false">Show</button></div></div>
+<div class="row-between"><label class="remember"><input type="checkbox" id="rememberMe" name="rememberMe"> Remember me on this device</label></div>
+<button class="primary" id="submitButton" type="submit"><span id="submitText">Sign In</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+</form>
+<div class="signup">Don't have an account? <a href="register.html"><strong>Create an account</strong></a></div>
+<div class="divider">ACCOUNT SECURITY</div>
+<div class="security-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></svg><span>Never share your password with anyone. DecisionWise should only authenticate you through its official, secured server.</span></div>
+<p class="small-note">This page needs the DecisionWise authentication backend before it can sign users in.</p>
+</section></main>
+<footer class="footer">© <span id="year"></span> DecisionWise · <a href="index.html">Home</a> · <a href="privacy.html">Privacy</a></footer>
+<script>
+const form=document.getElementById("loginForm"),message=document.getElementById("formMessage"),submitButton=document.getElementById("submitButton"),submitText=document.getElementById("submitText"),password=document.getElementById("password"),togglePassword=document.getElementById("togglePassword");
+document.getElementById("year").textContent=new Date().getFullYear();
+togglePassword.addEventListener("click",()=>{const visible=password.type==="password";password.type=visible?"text":"password";togglePassword.textContent=visible?"Hide":"Show";togglePassword.setAttribute("aria-label",visible?"Hide password":"Show password");togglePassword.setAttribute("aria-pressed",String(visible));});
+function showMessage(text,type){message.textContent=text;message.className="message show "+type;}
+form.addEventListener("submit",async event=>{event.preventDefault();message.className="message";const emailInput=document.getElementById("email"),email=emailInput.value.trim(),passwordValue=password.value;
+if(!email||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)){showMessage("Enter a valid email address.","error");emailInput.focus();return;}
+if(!passwordValue){showMessage("Enter your password.","error");password.focus();return;}
+/* Backend contract: POST /api/auth/login with {email,password}.
+   Server should set a secure, HttpOnly, SameSite cookie. Never store passwords or session tokens in localStorage. */
+submitButton.disabled=true;submitText.textContent="Connecting…";
+try{const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({email,password:passwordValue})});const result=await response.json().catch(()=>({}));
+if(!response.ok){if(response.status===404||response.status===405){showMessage("The authentication service is not connected yet. The login page is ready, but the server endpoint must be implemented.","info");}else{showMessage(result.message||"Sign-in failed. Check your details and try again.","error");}return;}
+showMessage("Signed in successfully. Opening your dashboard…","success");window.location.assign("dashboard.html");
+}catch(_){showMessage("Could not reach the authentication server. Run DecisionWise with its backend, then try again.","info");}
+finally{submitButton.disabled=false;submitText.textContent="Sign In";}
+});
+</script>
+</body>
+</html>

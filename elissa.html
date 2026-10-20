@@ -1,0 +1,337 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DecisionWise | Intelligent Decision Support</title>
+<style>
+:root {
+  --navy:#10243e;
+  --blue:#2463eb;
+  --bg:#f4f7fb;
+  --text:#17263c;
+  --muted:#718096;
+  --line:#e3e9f2;
+  --white:#fff;
+  --green:#13865c;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:245px;background:var(--navy);color:white;padding:24px 15px;flex-shrink:0}
+.brand{font-size:23px;font-weight:800;padding:8px 12px 30px}
+.brand span{color:#75a6ff}
+.nav-label{font-size:11px;color:#9eb0c9;padding:14px 12px 8px;text-transform:uppercase;letter-spacing:1.3px}
+.nav button{width:100%;text-align:left;border:0;background:transparent;color:#c7d3e5;padding:13px 12px;border-radius:9px;margin:2px 0}
+.nav button:hover,.nav button.active{background:#243e60;color:white}
+.sidebar-bottom{margin-top:35px;border-top:1px solid #334760;padding-top:15px}
+.main{min-width:0;flex:1}
+.topbar{height:76px;background:white;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px}
+.topbar small{color:var(--muted)}
+.avatar{width:38px;height:38px;border-radius:50%;background:#dbeafe;color:#1d4ed8;display:grid;place-items:center;font-weight:bold}
+.content{max-width:1250px;margin:auto;padding:30px}
+.page{display:none}.page.active{display:block}
+h1{font-size:29px;margin:0 0 9px}
+h2{font-size:19px;margin:0 0 16px}
+p{line-height:1.6}
+.muted{color:var(--muted)}
+.welcome{background:linear-gradient(120deg,#15345a,#2463eb);color:white;border-radius:18px;padding:30px;margin-bottom:24px}
+.welcome p{color:#e0eaff;max-width:650px}
+.btn{border:0;background:var(--blue);color:white;padding:12px 17px;border-radius:9px;font-weight:600}
+.btn:hover{filter:brightness(.94)}
+.btn.light{background:white;color:var(--navy)}
+.btn.outline{background:white;color:var(--blue);border:1px solid #cbd8f4}
+.btn.dark{background:var(--navy)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px}
+.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.card{background:white;border:1px solid var(--line);border-radius:14px;padding:21px;margin-bottom:18px}
+.stat{font-size:29px;font-weight:800;margin:10px 0}
+.stat-label{color:var(--muted);font-size:13px}
+.icon{width:39px;height:39px;background:#eaf1ff;color:var(--blue);border-radius:11px;display:grid;place-items:center;font-size:20px}
+.field{margin:16px 0}
+label{display:block;font-size:13px;font-weight:700;margin-bottom:7px}
+input,select,textarea{width:100%;padding:12px;border:1px solid #d5deea;border-radius:9px;background:white;color:var(--text)}
+textarea{min-height:105px;resize:vertical}
+input:focus,textarea:focus,select:focus{outline:2px solid #b9d0ff;border-color:var(--blue)}
+.row{display:flex;gap:12px;align-items:center}
+.row>*{flex:1;min-width:0}
+.notice{background:#eef5ff;border-left:4px solid var(--blue);padding:13px;border-radius:5px;font-size:13px;line-height:1.6}
+.result{white-space:pre-wrap;line-height:1.75}
+.pill{display:inline-block;background:#e8f7ef;color:#14784c;padding:5px 9px;border-radius:30px;font-size:12px}
+.option{border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0}
+.option h3{margin:0 0 8px;font-size:15px}
+.bar{height:8px;background:#e8edf5;border-radius:8px;overflow:hidden;margin:8px 0}
+.bar span{display:block;height:100%;background:var(--blue);border-radius:8px}
+.empty{text-align:center;padding:35px 15px;color:var(--muted)}
+footer{padding:20px 0;color:var(--muted);font-size:12px}
+.mobile-menu{display:none}
+@media(max-width:850px){
+ .sidebar{width:205px}.content{padding:20px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:600px){
+ .layout{display:block}.sidebar{display:none;width:100%}.sidebar.open{display:block}
+ .topbar{height:65px;padding:0 16px}.content{padding:16px}
+ .grid,.grid.two{grid-template-columns:1fr}.welcome{padding:22px}
+ .mobile-menu{display:inline-block;background:white;border:1px solid var(--line);padding:8px;border-radius:8px}
+ h1{font-size:25px}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">Decision<span>Wise</span></div>
+    <nav class="nav">
+      <div class="nav-label">Workspace</div>
+      <button class="active" data-page="dashboard">◫ &nbsp; Dashboard</button>
+      <button data-page="analyze">◎ &nbsp; Analyze a Decision</button>
+      <button data-page="history">▤ &nbsp; Decision Records</button>
+      <div class="nav-label">Collaboration</div>
+      <button data-page="cita">♧ &nbsp; CITA Agency</button>
+      <button data-page="reports">▥ &nbsp; Reports & Insights</button>
+      <div class="nav-label">Preferences</div>
+      <button data-page="settings">⚙ &nbsp; Settings</button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div style="font-size:12px;color:#a9bad0;padding:10px">DECISIONWISE PROTOTYPE<br>Local browser version</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="row" style="display:flex;align-items:center;gap:12px;flex:0 1 auto">
+        <button class="mobile-menu" id="menuButton">☰</button>
+        <div><strong id="pageTitle">Dashboard</strong><br><small>Decision intelligence workspace</small></div>
+      </div>
+      <div class="row" style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
+        <div style="text-align:right"><strong>Guest User</strong><br><small>Local prototype</small></div>
+        <div class="avatar">G</div>
+      </div>
+    </header>
+
+    <div class="content">
+      <section class="page active" id="dashboard">
+        <div class="welcome">
+          <div style="font-size:12px;letter-spacing:1.5px">THINK CLEARLY. DECIDE WISELY.</div>
+          <h1 style="margin-top:14px">Welcome to DecisionWise</h1>
+          <p>Understand your situation, explore alternatives, evaluate risks, and make decisions based on the complete picture—not just the most attractive option.</p>
+          <button class="btn light" data-go="analyze">Start decision analysis →</button>
+        </div>
+        <div class="grid">
+          <div class="card"><div class="icon">◎</div><div class="stat" id="totalDecisions">0</div><div class="stat-label">Saved decision records</div></div>
+          <div class="card"><div class="icon">↗</div><div class="stat">360°</div><div class="stat-label">Context-first approach</div></div>
+          <div class="card"><div class="icon">◇</div><div class="stat">5</div><div class="stat-label">Analysis dimensions</div></div>
+        </div>
+        <div class="grid two">
+          <div class="card">
+            <h2>Start with the situation</h2>
+            <p class="muted">Describe the real problem before choosing a solution.</p>
+            <button class="btn" data-go="analyze">Analyze a decision</button>
+          </div>
+          <div class="card">
+            <h2>Review previous work</h2>
+            <p class="muted">See the decision records saved in this browser.</p>
+            <button class="btn outline" data-go="history">View records</button>
+          </div>
+        </div>
+        <div class="notice">DecisionWise provides structured decision support. It does not replace professional advice or the judgment of authorized decision-makers.</div>
+      </section>
+
+      <section class="page" id="analyze">
+        <h1>Decision Analysis</h1>
+        <p class="muted">Describe the situation and compare options across benefits, costs, risks, and feasibility.</p>
+        <div class="card">
+          <form id="decisionForm">
+            <div class="field"><label for="title">Decision title</label><input id="title" required placeholder="e.g. Choosing a school project"></div>
+            <div class="field"><label for="context">Situation and background</label><textarea id="context" required placeholder="What is happening? Who is affected? Why must a decision be made?"></textarea></div>
+            <div class="field"><label for="goal">Desired outcome</label><textarea id="goal" required placeholder="What would a successful outcome look like?"></textarea></div>
+            <div class="field"><label for="constraints">Constraints and limitations</label><textarea id="constraints" placeholder="Budget, time, rules, available resources, obligations..."></textarea></div>
+            <div class="field"><label for="options">Possible options (one per line, at least two)</label><textarea id="options" required placeholder="Option A: ...&#10;Option B: ..."></textarea></div>
+            <div class="row">
+              <div class="field"><label for="urgency">Urgency</label><select id="urgency"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+              <div class="field"><label for="risk">Risk tolerance</label><select id="risk"><option>Low</option><option selected>Moderate</option><option>High</option></select></div>
+            </div>
+            <button class="btn" type="submit">Generate structured analysis →</button>
+          </form>
+        </div>
+        <div id="analysisOutput" class="card" hidden>
+          <div class="row" style="display:flex;align-items:center;justify-content:space-between">
+            <h2>Analysis report</h2><button class="btn outline" id="saveDecision">Save record</button>
+          </div>
+          <div id="report" class="result"></div>
+        </div>
+      </section>
+
+      <section class="page" id="history">
+        <h1>Decision Records</h1>
+        <p class="muted">Your saved records from this browser.</p>
+        <div id="historyList"></div>
+      </section>
+
+      <section class="page" id="cita">
+        <h1>CITA Agency</h1>
+        <p class="muted">A future collaboration space for authorized staff, mediators, and people requesting assistance.</p>
+        <div class="grid two">
+          <div class="card"><div class="icon">♧</div><h2>Request assistance</h2><p class="muted">Organize the details of a problem and identify what support may be needed.</p><button class="btn" id="requestHelp">Start a local request</button></div>
+          <div class="card"><div class="icon">▤</div><h2>Team collaboration</h2><p class="muted">Secure staff invitations, case permissions, and real-time messages require the backend.</p><button class="btn outline" id="teamInfo">View implementation status</button></div>
+        </div>
+        <div class="card" id="citaOutput" hidden></div>
+        <div class="notice">This prototype does not send requests to an agency, create staff accounts, or provide secure messaging. Do not enter confidential personal or case information here.</div>
+      </section>
+
+      <section class="page" id="reports">
+        <h1>Reports & Insights</h1>
+        <p class="muted">A summary of your locally saved decision records.</p>
+        <div class="grid">
+          <div class="card"><div class="stat" id="reportCount">0</div><div class="stat-label">Records saved</div></div>
+          <div class="card"><div class="stat">5</div><div class="stat-label">Dimensions in each analysis</div></div>
+          <div class="card"><div class="stat">Local</div><div class="stat-label">Storage scope</div></div>
+        </div>
+        <div class="card"><h2>Recent decisions</h2><div id="reportHistory" class="muted">No records saved yet.</div></div>
+        <div class="notice">The scores in this prototype are illustrative heuristics, not scientifically validated predictions.</div>
+      </section>
+
+      <section class="page" id="settings">
+        <h1>Settings</h1>
+        <p class="muted">Personalize this browser prototype.</p>
+        <div class="card">
+          <h2>Workspace preferences</h2>
+          <div class="field"><label for="displayName">Display name</label><input id="displayName" placeholder="Enter a display name"></div>
+          <div class="field"><label for="language">Interface language</label><select id="language"><option>English</option><option>Kinyarwanda (planned)</option><option>French (planned)</option></select></div>
+          <button class="btn" id="saveSettings">Save preferences locally</button>
+          <p id="settingsStatus" class="muted"></p>
+        </div>
+        <div class="card">
+          <h2>Application status</h2>
+          <p>Frontend: running in this browser.</p>
+          <p>Database, secure login, AI service, translation API, and live messaging: not connected.</p>
+          <button class="btn outline" id="exportData">Export local records</button>
+        </div>
+      </section>
+      <footer>DecisionWise © 2026 · Prototype for development and testing</footer>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const pageNames = {
+  dashboard:"Dashboard", analyze:"Decision Analysis", history:"Decision Records",
+  cita:"CITA Agency", reports:"Reports & Insights", settings:"Settings"
+};
+let latestAnalysis = null;
+
+function readRecords(){
+  try { return JSON.parse(localStorage.getItem("dw_records") || "[]"); }
+  catch { return []; }
+}
+function writeRecords(records){
+  localStorage.setItem("dw_records", JSON.stringify(records));
+  updateCounts();
+}
+function showPage(id){
+  if(!$(id)) return;
+  document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id===id));
+  document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+  $("pageTitle").textContent=pageNames[id] || id;
+  $("sidebar").classList.remove("open");
+  if(id==="history") renderHistory();
+  if(id==="reports") renderReports();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+document.querySelectorAll("[data-page]").forEach(b=>b.addEventListener("click",()=>showPage(b.dataset.page)));
+document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>showPage(b.dataset.go)));
+$("menuButton").addEventListener("click",()=>$("sidebar").classList.toggle("open"));
+
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function scoreOption(name,index,total){
+  // Illustrative equal-weight heuristic; not an AI prediction.
+  return Math.round(50 + ((total-index-1)*8) / Math.max(total-1,1));
+}
+$("decisionForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const title=$("title").value.trim();
+  const context=$("context").value.trim();
+  const goal=$("goal").value.trim();
+  const constraints=$("constraints").value.trim() || "No constraints specified.";
+  const options=$("options").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  if(options.length<2){alert("Please enter at least two options, one per line.");return;}
+  latestAnalysis={
+    id:Date.now(),title,context,goal,constraints,options,
+    urgency:$("urgency").value,risk:$("risk").value,
+    createdAt:new Date().toLocaleString()
+  };
+  const scored=options.map((name,i)=>({name,score:scoreOption(name,i,options.length)}));
+  $("report").innerHTML=
+    "<p><span class='pill'>STRUCTURED REVIEW</span></p>"+
+    "<h3>1. Situation</h3><p>"+escapeHTML(context)+"</p>"+
+    "<h3>2. Desired outcome</h3><p>"+escapeHTML(goal)+"</p>"+
+    "<h3>3. Constraints</h3><p>"+escapeHTML(constraints)+"</p>"+
+    "<h3>4. Options to evaluate</h3>"+
+    scored.map(o=>"<div class='option'><h3>"+escapeHTML(o.name)+"</h3><div class='muted'>Illustrative ordering indicator—not a validated score</div><div class='bar'><span style='width:"+o.score+"%'></span></div></div>").join("")+
+    "<h3>5. Risks and questions</h3><ul>"+
+    ["What is the worst plausible outcome for each option?",
+    "Who benefits, and who may be harmed or excluded?",
+    "What evidence supports the assumptions?",
+    "Can the decision be reversed if it fails?",
+    "What rules, budget limits, or deadlines apply?"].map(x=>"<li>"+x+"</li>").join("")+
+    "</ul><h3>6. Recommended next step</h3><p>Verify the facts, compare each option against the desired outcome and constraints, and ask affected people for input. Do not select an option from the illustrative score alone.</p>"+
+    "<p><strong>Urgency:</strong> "+escapeHTML(latestAnalysis.urgency)+" · <strong>Risk tolerance:</strong> "+escapeHTML(latestAnalysis.risk)+"</p>"+
+    "<p class='muted'>This is a local rule-based template, not an AI-generated conclusion.</p>";
+  $("analysisOutput").hidden=false;
+  $("analysisOutput").scrollIntoView({behavior:"smooth"});
+});
+$("saveDecision").addEventListener("click",()=>{
+  if(!latestAnalysis){alert("Create an analysis first.");return;}
+  const records=readRecords();
+  records.unshift(latestAnalysis);
+  writeRecords(records);
+  alert("Decision record saved in this browser.");
+});
+function updateCounts(){
+  const n=readRecords().length;
+  $("totalDecisions").textContent=n;
+  $("reportCount").textContent=n;
+}
+function renderHistory(){
+  const records=readRecords();
+  $("historyList").innerHTML=records.length?records.map(r=>
+    "<div class='card'><h2>"+escapeHTML(r.title)+"</h2><p class='muted'>"+escapeHTML(r.createdAt)+"</p><p>"+escapeHTML(r.context.slice(0,220))+"</p><strong>Options:</strong> "+r.options.map(escapeHTML).join(", ")+"</div>"
+  ).join(""):"<div class='card empty'>No saved records yet. Start by analyzing a decision.</div>";
+}
+function renderReports(){
+  const records=readRecords();
+  $("reportHistory").innerHTML=records.length?records.slice(0,10).map(r=>"<p>• "+escapeHTML(r.title)+" — "+escapeHTML(r.createdAt)+"</p>").join(""):"No records saved yet.";
+}
+$("requestHelp").addEventListener("click",()=>{
+  $("citaOutput").hidden=false;
+  $("citaOutput").innerHTML="<h2>Local assistance request draft</h2><p>This prototype does not transmit requests. Use Decision Analysis to organize the situation and desired outcome. A secure submission form will be added when the backend is built.</p>";
+});
+$("teamInfo").addEventListener("click",()=>{
+  $("citaOutput").hidden=false;
+  $("citaOutput").innerHTML="<h2>Backend required</h2><p>To enable real team messaging, the next build needs authenticated users, invitation-only staff accounts, a database, permission checks, and real-time message delivery.</p>";
+});
+$("saveSettings").addEventListener("click",()=>{
+  localStorage.setItem("dw_display_name",$("displayName").value.trim());
+  localStorage.setItem("dw_language",$("language").value);
+  $("settingsStatus").textContent="Preferences saved in this browser.";
+});
+$("displayName").value=localStorage.getItem("dw_display_name")||"";
+$("language").value=localStorage.getItem("dw_language")||"English";
+$("exportData").addEventListener("click",()=>{
+  const data=JSON.stringify(readRecords(),null,2);
+  const blob=new Blob([data],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="decisionwise-records.json";a.click();
+  URL.revokeObjectURL(url);
+});
+updateCounts();
+</script>
+</body>
+</html>
