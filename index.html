@@ -1,3 +1,337 @@
+DECISIONWISE — ALL SOURCE FILES
+HTML + CSS + JavaScript + Node.js server/API + Supabase SQL
+Generated source listing. Configure Supabase before real accounts/messaging can work.
+
+
+==========================================================================================
+FILE: .env.example
+==========================================================================================
+PORT=3000
+GOOGLE_TRANSLATE_API_KEY=add_your_google_cloud_translation_api_key_here
+
+
+==========================================================================================
+FILE: README.md
+==========================================================================================
+# DecisionWise — HTML, CSS, JavaScript, accounts and direct messaging
+
+DecisionWise is a separate project from CITA Agency. This is a multi-page website built with **HTML, CSS, and vanilla JavaScript**, plus a small Node.js development server and Vercel API functions. Supabase provides the hosted authentication and PostgreSQL/realtime services needed for real accounts and messages.
+
+## Project structure
+
+```text
+DecisionWise/
+├── public/                    # Website pages and browser assets
+│   ├── index.html             # Homepage
+│   ├── how-it-works.html
+│   ├── categories.html
+│   ├── decision.html
+│   ├── accounts.html
+│   ├── messages.html           # Real direct-messaging interface
+│   ├── about.html
+│   ├── languages.html
+│   ├── login.html              # Sign up and sign in
+│   ├── 404.html
+│   ├── css/style.css
+│   └── js/
+│       ├── main.js
+│       ├── supabase-config.js  # Add Supabase project URL + public anon key here
+│       ├── auth-app.js
+│       └── messages-app.js
+├── supabase/messaging.sql      # Database schema, functions, RLS, realtime
+├── api/status.js               # Vercel status function
+├── api/translate.js            # Vercel Google Cloud Translation function
+├── local-server.js             # Local development server
+├── package.json
+├── vercel.json
+├── .env.example
+└── README.md
+```
+
+## What is implemented
+
+- Responsive multi-page interface and shared styling.
+- Sign-up and sign-in using Supabase Auth (passwords are handled by Supabase, not stored by this site).
+- Profile creation and user search by display name/username.
+- One-to-one conversations stored in Supabase PostgreSQL.
+- Realtime incoming message subscriptions while a conversation is open.
+- Database Row Level Security (RLS) policies and restricted database functions.
+- Light/dark theme controls and the existing decision workspace UI.
+- Optional server-side translation API for English, French, and Kinyarwanda; Google Cloud Translation must be configured separately.
+
+## Required setup for real accounts and messages
+
+The code cannot connect to your database until you configure a Supabase project. There is no fake/localStorage messaging fallback.
+
+1. Create a project at https://supabase.com/.
+2. In the Supabase dashboard, open **SQL Editor → New query**.
+3. Open `supabase/messaging.sql`, copy the entire file into the editor, and run it. Resolve any SQL error before continuing.
+4. Open Supabase **Project Settings → API** (or API Keys). Copy the Project URL and the **anon/public** key.
+5. Edit `public/js/supabase-config.js` and replace the two placeholder values:
+
+   ```js
+   window.DECISIONWISE_SUPABASE_URL = "https://YOUR_REAL_PROJECT_ID.supabase.co";
+   window.DECISIONWISE_SUPABASE_ANON_KEY = "YOUR_REAL_SUPABASE_ANON_KEY";
+   ```
+
+   The anon/public key is designed for browser use when RLS is enabled. **Never use the `service_role` key or database password in browser code.**
+6. In Supabase **Authentication → URL Configuration**, allow `http://localhost:3000` for local testing. Later add your exact Vercel domain.
+7. In **Authentication → Providers → Email**, check whether email confirmation is enabled. If it is, users must verify their email before signing in.
+
+## Run locally in VS Code on Windows
+
+Install Node.js 18 or newer first: https://nodejs.org/.
+
+1. Extract this ZIP.
+2. Open the extracted `DecisionWise` folder in VS Code (the folder containing `package.json`).
+3. Choose **Terminal → New Terminal**.
+4. Run:
+
+   ```bash
+   npm install
+   npm start
+   ```
+
+5. Open `http://localhost:3000/login.html`.
+6. Create two test accounts using email addresses you control. If email verification is enabled, verify both.
+7. Sign in as user A, open Messaging, search for user B's display name or username, and send a message. Open a second browser profile and sign in as user B to verify persistence and live delivery.
+
+To check JavaScript syntax after installing dependencies, run `npm run check`.
+
+## Deploy to Vercel
+
+1. Create a GitHub repository and upload the **contents** of this project folder. Do not upload `.env` files, passwords, or service-role keys.
+2. In https://vercel.com/, select **Add New → Project** and import the repository.
+3. Use the folder containing `package.json`, `vercel.json`, `api/`, and `public/` as the project root. The output directory is set to `public`; use no frontend build command.
+4. Deploy. Add the resulting domain to Supabase **Authentication → URL Configuration**.
+5. Open `https://YOUR-VERCEL-DOMAIN/login.html` and test with two accounts.
+6. For translation, set `GOOGLE_TRANSLATE_API_KEY` in Vercel Project Settings → Environment Variables, enable the Google Cloud Translation API, configure billing if required, and redeploy. Never put this key in browser JavaScript.
+
+## Honest limitations
+
+- Real accounts and messaging require the Supabase setup above; placeholders intentionally prevent connection until configured.
+- Messages are direct one-to-one messages. Group chats, attachments, editing/deleting, read receipts, typing indicators, blocking/reporting, and moderation are not implemented.
+- The decision workspace is an interface starter; a complete AI-powered decision-analysis engine is not implemented yet.
+- Translation only works after the provider key/API is configured and currently applies only to supported UI text; it does not automatically translate all user-generated messages.
+- This project has not had an independent penetration test. Do not use it for confidential government, medical, legal, or emergency case communications until it has a professional security and privacy review.
+
+
+==========================================================================================
+FILE: api/status.js
+==========================================================================================
+export default function handler(_req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).json({
+    ok: true,
+    translationConfigured: Boolean(process.env.GOOGLE_TRANSLATE_API_KEY && !process.env.GOOGLE_TRANSLATE_API_KEY.includes("your_google_cloud"))
+  });
+}
+
+
+==========================================================================================
+FILE: api/translate.js
+==========================================================================================
+const allowed = new Set(["en", "fr", "rw"]);
+
+export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Use POST to translate text." });
+  }
+
+  const body = req.body || {};
+  const { texts, target, source = "en" } = body;
+  if (!Array.isArray(texts) || texts.length < 1 || texts.length > 100 ||
+      !texts.every(x => typeof x === "string" && x.length <= 2000)) {
+    return res.status(400).json({ error: "Send 1–100 text strings, each no longer than 2,000 characters." });
+  }
+  if (!allowed.has(target) || !allowed.has(source) || target === source) {
+    return res.status(400).json({ error: "Unsupported source or target language." });
+  }
+
+  const key = process.env.GOOGLE_TRANSLATE_API_KEY;
+  if (!key || key.includes("your_google_cloud")) {
+    return res.status(503).json({ error: "Translation setup required: add GOOGLE_TRANSLATE_API_KEY in Vercel Project Settings → Environment Variables." });
+  }
+
+  try {
+    const url = new URL("https://translation.googleapis.com/language/translate/v2");
+    url.searchParams.set("key", key);
+    const upstream = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ q: texts, source, target, format: "text" }),
+      signal: AbortSignal.timeout(15000)
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      console.error("Google Translation error:", upstream.status, data?.error?.message || "");
+      return res.status(502).json({ error: "Translation provider rejected the request. Check the API key, billing, and API enablement." });
+    }
+    const translations = data?.data?.translations;
+    if (!Array.isArray(translations) || translations.length !== texts.length) {
+      return res.status(502).json({ error: "Unexpected translation response." });
+    }
+    return res.status(200).json({ translations: translations.map(item => item.translatedText) });
+  } catch (error) {
+    console.error("Translation failed:", error?.message || "unknown error");
+    return res.status(504).json({ error: "Translation service timed out or could not be reached." });
+  }
+}
+
+
+==========================================================================================
+FILE: local-server.js
+==========================================================================================
+import express from "express";
+import helmet from "helmet";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+dotenv.config();
+const app = express();
+const root = path.dirname(fileURLToPath(import.meta.url));
+const allowed = new Set(["en", "fr", "rw"]);
+app.use(helmet({
+  contentSecurityPolicy: { directives: {
+    defaultSrc: ["'self'"], scriptSrc: ["'self'", "https://cdn.jsdelivr.net"], styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+    fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"], imgSrc: ["'self'", "data:"],
+    connectSrc: ["'self'", "https://translation.googleapis.com", "https://*.supabase.co", "wss://*.supabase.co"], objectSrc: ["'none'"]
+  }}
+}));
+app.use(express.json({limit:"40kb"}));
+app.use(express.static(path.join(root,"public")));
+app.get("/api/status", (_req,res) => res.json({ok:true,translationConfigured:Boolean(process.env.GOOGLE_TRANSLATE_API_KEY)}));
+app.post("/api/translate", async (req,res) => {
+  const {texts,target,source="en"} = req.body || {};
+  if (!Array.isArray(texts) || texts.length < 1 || texts.length > 100 || !texts.every(x => typeof x === "string" && x.length <= 2000))
+    return res.status(400).json({error:"Send 1–100 text strings, each no longer than 2,000 characters."});
+  if (!allowed.has(target) || !allowed.has(source) || target === source)
+    return res.status(400).json({error:"Unsupported source or target language."});
+  const key = process.env.GOOGLE_TRANSLATE_API_KEY;
+  if (!key || key.includes("your_google_cloud") || key.includes("add_your_"))
+    return res.status(503).json({error:"Translation setup required: add your Google Cloud Translation API key to the server .env file."});
+  try {
+    const url = new URL("https://translation.googleapis.com/language/translate/v2");
+    url.searchParams.set("key",key);
+    const upstream = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({q:texts,source,target,format:"text"}),signal:AbortSignal.timeout(15000)});
+    const data = await upstream.json().catch(()=>({}));
+    if (!upstream.ok) {
+      console.error("Google Translation error:",upstream.status,data?.error?.message || "");
+      return res.status(502).json({error:"Translation provider rejected the request. Check the API key, billing, and API enablement."});
+    }
+    const result = data?.data?.translations;
+    if (!Array.isArray(result) || result.length !== texts.length) return res.status(502).json({error:"Unexpected translation response."});
+    res.set("Cache-Control","no-store");
+    return res.json({translations:result.map(x=>x.translatedText)});
+  } catch (e) {
+    console.error("Translation failed:",e.message);
+    return res.status(504).json({error:"Translation service timed out or could not be reached."});
+  }
+});
+app.listen(Number(process.env.PORT||3000),()=>console.log(`DecisionWise: http://localhost:${process.env.PORT||3000}`));
+
+
+==========================================================================================
+FILE: package.json
+==========================================================================================
+{
+  "name": "decisionwise",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node local-server.js",
+    "dev": "node --watch local-server.js",
+    "check": "node --check local-server.js && node --check api/status.js && node --check api/translate.js && node --check public/js/main.js && node --check public/js/supabase-config.js && node --check public/js/auth-app.js && node --check public/js/messages-app.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0"
+  }
+}
+
+
+==========================================================================================
+FILE: public/404.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Page not found | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body><header class="site-header"><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span class="brand-name">Decision<span>Wise</span></span></a><a class="btn btn-primary btn-small" href="/index.html">Home</a></div></header><main><section class="section"><div class="wrap"><div class="card"><div class="eyebrow">404 error</div><h1>Page not found</h1><p>The page you requested does not exist or its address may be incorrect.</p><a class="btn btn-primary" href="/index.html">Return to DecisionWise</a></div></div></section></main></body></html>
+
+==========================================================================================
+FILE: public/about.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>About us | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main><section class="page-hero"><div class="wrap"><div class="crumb" data-translate>Home / About us</div><div class="eyebrow" data-translate>Our purpose</div><h1 data-translate>Better decisions begin with better understanding.</h1><p data-translate>DecisionWise is being designed to help individuals, teams, and institutions examine the full situation rather than relying on a single positive or negative signal.</p></div></section><section class="section"><div class="wrap grid-2"><article class="card"><div class="card-icon">◎</div><h3 data-translate>Our mission</h3><p data-translate>Make structured decision-making easier to access, explain, and apply across life and work.</p></article><article class="card"><div class="card-icon">↗</div><h3 data-translate>Our vision</h3><p data-translate>A world where decisions use clear context, careful comparison, accountability, and consideration for affected people.</p></article><article class="card"><div class="card-icon">◇</div><h3 data-translate>Our approach</h3><p data-translate>Consider evidence, alternatives, trade-offs, uncertainty, fairness, feasibility, and longer-term consequences.</p></article><article class="card"><div class="card-icon">♧</div><h3 data-translate>People come first</h3><p data-translate>Technology can support reasoning, but it should not replace human responsibility or professional expertise.</p></article></div><div class="wrap" style="margin-top:24px"><div class="cta"><div><h2 data-translate>Ready to work through a decision?</h2><p data-translate>Start by describing the situation and the outcome you need.</p></div><a class="btn" href="/decision.html" data-translate>Start now →</a></div></div></section></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/accounts.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>Accounts | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main><section class="page-hero"><div class="wrap"><div class="crumb" data-translate>Home / Accounts</div><div class="eyebrow" data-translate>Access and responsibilities</div><h1 data-translate>Different roles, clearly defined responsibilities.</h1><p data-translate>These cards explain intended account roles. Real sign-in and permission enforcement must be implemented on the server before sensitive use.</p></div></section><section class="section"><div class="wrap grid-2"><article class="card"><span class="role" data-translate>Open access</span><div class="card-icon">◌</div><h3 data-translate>Guest</h3><p data-translate>Explore public information and use a non-persistent decision worksheet without creating an account.</p><a class="btn btn-secondary" href="/decision.html" data-translate>Continue as guest</a></article><article class="card"><span class="role" data-translate>Personal workspace</span><div class="card-icon">♙</div><h3 data-translate>User</h3><p data-translate>For a registered person to manage their profile, decisions, and authorized conversations.</p><a class="btn btn-primary" href="/login.html" data-translate>Sign in / create account</a></article><article class="card"><span class="role" data-translate>Managed access</span><div class="card-icon">⚙</div><h3 data-translate>Admin</h3><p data-translate>Intended to manage approved operations, users, reports, and support workflows within assigned permissions.</p><a class="btn btn-secondary" href="/login.html" data-translate>Admin sign-in</a></article><article class="card"><span class="role" data-translate>Highest platform role</span><div class="card-icon">◆</div><h3 data-translate>Super Admin</h3><p data-translate>Intended to manage system-wide configuration. This role must never be granted by a front-end button.</p><a class="btn btn-secondary" href="/login.html" data-translate>Authorized sign-in</a></article></div><div class="wrap" style="margin-top:18px"><div class="note" data-translate>Security note: this demo does not create accounts or enforce roles. Do not store confidential information until authentication, authorization, audit logging, and database protection are implemented.</div></div></section></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/categories.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>Categories | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main>
+<section class="page-hero"><div class="wrap"><div class="crumb" data-translate>Home / Categories</div><div class="eyebrow" data-translate>Different kinds of decisions</div><h1 data-translate>Choose a category to frame your decision.</h1><p data-translate>Each category gives you a starting point. You still need to examine the real situation and compare options.</p></div></section>
+<section class="section"><div class="wrap"><div class="categories">
+<a class="category" href="/decision.html?category=Business"><div class="card-icon">▦</div><b data-translate>Business</b><small data-translate>Strategy, operations, customers, and growth</small></a>
+<a class="category" href="/decision.html?category=Finance"><div class="card-icon">◉</div><b data-translate>Finance</b><small data-translate>Budgets, savings, investment, and resources</small></a>
+<a class="category" href="/decision.html?category=Social"><div class="card-icon">♧</div><b data-translate>Social</b><small data-translate>Community needs, relationships, and social impact</small></a>
+<a class="category" href="/decision.html?category=Education"><div class="card-icon">⌂</div><b data-translate>Education</b><small data-translate>Study, schools, and learning opportunities</small></a>
+<a class="category" href="/decision.html?category=Technology"><div class="card-icon">⌘</div><b data-translate>Technology</b><small data-translate>Digital tools, systems, and technical projects</small></a>
+<a class="category" href="/decision.html?category=Health"><div class="card-icon">＋</div><b data-translate>Health</b><small data-translate>Wellbeing and care choices</small></a>
+<a class="category" href="/decision.html?category=Government"><div class="card-icon">▤</div><b data-translate>Government</b><small data-translate>Public services, policies, and institutions</small></a>
+<a class="category" href="/decision.html?category=Other"><div class="card-icon">•••</div><b data-translate>Other</b><small data-translate>Any decision outside these categories</small></a>
+</div></div></section>
+</main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/css/style.css
+==========================================================================================
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+:root{--bg:#f5f8fc;--surface:#fff;--soft:#edf3fa;--text:#17283f;--muted:#62738a;--line:#dce5ef;--primary:#174e91;--blue:#2269bd;--accent:#20a58b;--shadow:0 18px 48px #14305217;--radius:20px;color-scheme:light}
+:root[data-theme=dark]{--bg:#0d1624;--surface:#142236;--soft:#1b2c43;--text:#edf4ff;--muted:#a5b4c9;--line:#2b3d55;--primary:#78b5ff;--blue:#a4ceff;--accent:#54d6bb;--shadow:0 18px 48px #0004;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 "DM Sans",sans-serif}a{color:inherit;text-decoration:none}button,input,textarea,select{font:inherit}button{cursor:pointer}h1,h2,h3{font-family:Manrope,sans-serif;letter-spacing:-.035em;line-height:1.2;margin:0 0 14px}p{color:var(--muted);margin:0 0 18px}.wrap{width:min(1160px,calc(100% - 40px));margin:auto}
+header{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}.navbar{min-height:76px;display:flex;align-items:center;gap:20px}.brand{display:flex;align-items:center;gap:10px;font:800 19px Manrope;white-space:nowrap}.brand-mark{width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#174e91,#20a58b);color:#fff;display:grid;place-items:center;font-size:22px}.brand span:last-child span{color:var(--blue)}nav{display:flex;align-items:center;gap:16px;margin-left:auto}nav a{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap}nav a:hover,nav a.active{color:var(--blue)}.nav-actions{display:flex;align-items:center;gap:8px}.lang-select,.theme-button,.menu-button{background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:11px;padding:9px}.lang-select{max-width:112px;font-size:12px}.theme-button{width:40px;height:40px;font-size:18px}.menu-button{display:none}.btn{border:0;border-radius:12px;padding:12px 18px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14px}.btn-primary{background:var(--primary);color:#fff}.btn-secondary{background:var(--surface);color:var(--text);border:1px solid var(--line)}.btn-small{padding:9px 13px;font-size:12px}
+.hero{padding:72px 0 52px}.hero-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:50px;align-items:center}.eyebrow{display:inline-block;border-radius:999px;padding:7px 12px;background:color-mix(in srgb,var(--accent) 12%,var(--surface));color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px}.hero h1{font-size:clamp(42px,5vw,66px)}.hero h1 em{font-style:normal;color:var(--blue)}.hero-copy{font-size:17px;max-width:610px;margin:20px 0 26px}.hero-buttons{display:flex;gap:10px;flex-wrap:wrap}.trust{display:flex;gap:18px;flex-wrap:wrap;margin-top:25px;color:var(--muted);font-size:12px}.trust span:before{content:"✓";color:var(--accent);margin-right:6px;font-weight:bold}
+.visual{background:var(--surface);border:1px solid var(--line);border-radius:28px;padding:22px;box-shadow:var(--shadow)}.visual-top{display:flex;justify-content:space-between;gap:12px;align-items:center}.mini{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}.online{font-size:11px;color:var(--accent)}.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0 16px}.tile{padding:15px;border:1px solid var(--line);border-radius:16px;background:var(--soft);min-height:110px}.tile i{font-style:normal;font-size:21px;display:block;margin-bottom:9px;color:var(--blue)}.tile b{display:block;font-size:13px}.tile small{font-size:11px;color:var(--muted)}.outcome{border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;gap:12px;align-items:center;background:color-mix(in srgb,var(--accent) 9%,var(--surface))}.check{background:var(--accent);color:#052f2a;border-radius:50%;width:36px;height:36px;display:grid;place-items:center;flex-shrink:0}.outcome b,.outcome small{display:block}.outcome small{color:var(--muted);font-size:11px}
+.section{padding:48px 0}.section-head{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:25px}.section-head h2{font-size:clamp(28px,3.5vw,40px);max-width:640px}.section-head p{max-width:460px;margin:0}.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:17px}.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px}.card-icon{width:46px;height:46px;border-radius:14px;background:var(--soft);display:grid;place-items:center;color:var(--blue);font-size:22px;margin-bottom:16px}.card h3{font-size:18px}.card p{font-size:14px}.card-link{font-size:13px;color:var(--blue);font-weight:800}.categories{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.category{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px;color:var(--text);text-align:left}.category:hover{border-color:var(--blue);transform:translateY(-2px)}.category .card-icon{width:38px;height:38px;margin-bottom:10px}.category b,.category small{display:block}.category b{font-size:14px}.category small{font-size:11px;color:var(--muted)}.cta{padding:32px;border-radius:24px;background:linear-gradient(120deg,#133d70,#176f83);color:white;display:flex;align-items:center;justify-content:space-between;gap:22px}.cta h2{color:white;font-size:clamp(25px,3vw,35px)}.cta p{color:#d7e8f8;margin:0}.cta .btn{background:white;color:#174e91;flex-shrink:0}
+.page-hero{padding:52px 0 30px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,color-mix(in srgb,var(--primary) 6%,var(--bg)),var(--bg))}.crumb{font-size:12px;color:var(--muted);margin-bottom:16px}.page-hero h1{font-size:clamp(34px,4.5vw,52px);max-width:850px}.page-hero p{max-width:760px}.steps{display:grid;gap:13px}.step{display:grid;grid-template-columns:50px 1fr;gap:16px;padding:21px;border:1px solid var(--line);border-radius:17px;background:var(--surface)}.num{height:44px;width:44px;border-radius:14px;background:var(--primary);color:white;display:grid;place-items:center;font-weight:800}.step p{margin:0;font-size:14px}.form-card{max-width:820px}.field{display:grid;gap:7px;margin-bottom:17px}.field label{font-size:13px;font-weight:700}.field input,.field textarea,.field select{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:12px}.field textarea{min-height:120px;resize:vertical}.note{padding:14px 15px;background:var(--soft);border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:12px}.role{display:inline-block;padding:5px 9px;border-radius:999px;background:var(--soft);color:var(--blue);font-size:10px;font-weight:800;margin-bottom:12px}.message-layout{display:grid;grid-template-columns:260px 1fr;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--surface);min-height:350px}.message-side{padding:20px;background:var(--soft);border-right:1px solid var(--line)}.message-main{padding:25px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.message-icon{width:62px;height:62px;border-radius:20px;background:var(--soft);display:grid;place-items:center;font-size:28px;margin-bottom:14px}.status{font-size:12px;color:var(--accent);margin-top:12px}.hidden{display:none!important}.translation-notice{font-size:12px;color:var(--muted);min-height:18px;margin-top:8px}.footer{border-top:1px solid var(--line);padding:25px 0;margin-top:45px}.footer-inner{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}.footer small{color:var(--muted)}.footer-links{display:flex;gap:14px;flex-wrap:wrap}.footer-links a{font-size:12px;color:var(--muted)}
+@media(max-width:1050px){nav{gap:10px}nav a{font-size:11px}.hero-grid{gap:25px}}@media(max-width:850px){.navbar{flex-wrap:wrap;padding:12px 0}.nav-actions{margin-left:auto}.menu-button{display:inline-block}nav{display:none;order:3;flex-basis:100%;flex-direction:column;align-items:stretch;gap:0}nav.open{display:flex}nav a{padding:12px;border-top:1px solid var(--line);font-size:14px}.hero-grid{grid-template-columns:1fr}.visual{max-width:600px}.grid-3{grid-template-columns:repeat(2,1fr)}.categories{grid-template-columns:repeat(2,1fr)}.section-head{align-items:start;flex-direction:column}.cta{align-items:start;flex-direction:column}}@media(max-width:540px){.wrap{width:calc(100% - 28px)}.hero{padding-top:42px}.hero h1{font-size:41px}.hero-copy{font-size:15px}.grid-3,.grid-2{grid-template-columns:1fr}.categories{gap:8px}.category{padding:12px}.card{padding:20px}.message-layout{grid-template-columns:1fr}.message-side{border-right:0;border-bottom:1px solid var(--line)}.cta{padding:24px}}
+
+/* Persistent messaging and authentication */
+.conversation-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.conversation-head h3{margin:0}.message-rule{border:0;border-top:1px solid var(--line);margin:18px 0}.muted-small{font-size:12px;color:var(--muted);margin:8px 0}.people-results,.conversation-list{display:grid;gap:8px}.person-result,.conversation-item{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text)}.person-result:hover,.conversation-item:hover,.conversation-item.active{border-color:var(--blue);background:color-mix(in srgb,var(--blue) 8%,var(--surface))}.person-avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;background:var(--soft);color:var(--blue);font-weight:800}.person-details{min-width:0;display:grid}.person-details strong{font-size:12px;overflow-wrap:anywhere}.person-details small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}.message-thread{min-width:0;display:flex;flex-direction:column}.thread-panel{min-width:0;display:flex;flex-direction:column;min-height:520px;max-height:720px}.thread-heading{padding:20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}.thread-heading h2{font-size:20px;margin:0 0 5px}.thread-heading p{font-size:12px;margin:0}.message-history{padding:20px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1;min-height:300px;background:var(--bg)}.chat-message{max-width:min(78%,520px);padding:10px 13px;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow-wrap:anywhere;white-space:pre-wrap}.chat-message.mine{align-self:flex-end;background:color-mix(in srgb,var(--blue) 13%,var(--surface));border-color:color-mix(in srgb,var(--blue) 30%,var(--line))}.chat-message .chat-meta{font-size:10px;color:var(--muted);display:block;margin-top:5px}.send-message-form{padding:14px;display:flex;align-items:flex-end;gap:10px;border-top:1px solid var(--line);background:var(--surface)}.send-message-form textarea{flex:1;min-width:0;resize:vertical;max-height:140px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text)}.send-message-form button{flex-shrink:0}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.auth-grid{align-items:start}.auth-grid h2{font-size:23px}.auth-grid .field{margin-top:18px}.auth-grid input:focus,.send-message-form textarea:focus,.field input:focus{outline:2px solid var(--blue);outline-offset:1px}
+@media(max-width:650px){.thread-panel{min-height:460px;max-height:680px}.message-history{min-height:260px;padding:14px}.thread-heading{padding:15px}.chat-message{max-width:90%}.send-message-form{padding:10px;align-items:stretch}.send-message-form .btn{padding:10px}.auth-grid{grid-template-columns:1fr}}
+
+
+==========================================================================================
+FILE: public/decision.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>Decision workspace | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main><section class="page-hero"><div class="wrap"><div class="crumb" data-translate>Home / Decision workspace</div><div class="eyebrow" data-translate>Work through a choice</div><h1 data-translate>Put the decision into context.</h1><p data-translate>Use this worksheet to organize the issue. This starter version does not use AI or produce an automatic recommendation.</p></div></section><section class="section"><div class="wrap"><div class="card form-card"><form id="decisionForm"><div class="field"><label for="decisionCategory" data-translate>Decision category</label><select id="decisionCategory"><option>Business</option><option>Finance</option><option>Social</option><option>Education</option><option>Technology</option><option>Health</option><option>Government</option><option>Other</option></select></div><div class="field"><label for="decisionTitle" data-translate>What decision must be made?</label><input id="decisionTitle" required placeholder="Example: Which learning platform should our school choose?"></div><div class="field"><label for="decisionSituation" data-translate>Situation and background</label><textarea id="decisionSituation" required placeholder="Facts, people involved, constraints, and what you have tried."></textarea></div><div class="field"><label for="decisionGoal" data-translate>What outcome matters most?</label><textarea id="decisionGoal" required placeholder="Your goal, priorities, budget, timeline, or limits."></textarea></div><div class="field"><label for="decisionOptions" data-translate>Options you are considering</label><textarea id="decisionOptions" required placeholder="List each option on a separate line."></textarea></div><button class="btn btn-primary" type="submit" data-translate>Organize my review →</button></form><div id="decisionResult" class="card hidden" style="margin-top:20px" aria-live="polite"></div></div></div></section><script>const c=new URLSearchParams(location.search).get("category");const s=document.getElementById("decisionCategory");if(c&&[...s.options].some(o=>o.value.toLowerCase()===c.toLowerCase()))s.value=[...s.options].find(o=>o.value.toLowerCase()===c.toLowerCase()).value;</script></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/how-it-works.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>How it works | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main><section class="page-hero"><div class="wrap"><div class="crumb" data-translate>Home / How it works</div><div class="eyebrow" data-translate>A structured process</div><h1 data-translate>Understand the situation before selecting a solution.</h1><p data-translate>DecisionWise organizes the questions to consider; people remain responsible for verifying facts and choosing what to do.</p></div></section><section class="section"><div class="wrap steps"><article class="step"><div class="num">01</div><div><h3 data-translate>Describe the context</h3><p data-translate>Clarify what is happening, what matters, what is known, what is uncertain, and which constraints cannot be ignored.</p></div></article><article class="step"><div class="num">02</div><div><h3 data-translate>Define the desired outcome</h3><p data-translate>State what a useful result looks like, including priorities, deadlines, resources, and acceptable trade-offs.</p></div></article><article class="step"><div class="num">03</div><div><h3 data-translate>List realistic alternatives</h3><p data-translate>Include more than one path where possible, including waiting, gathering evidence, or combining approaches.</p></div></article><article class="step"><div class="num">04</div><div><h3 data-translate>Compare consequences</h3><p data-translate>Consider benefits, costs, risks, feasibility, fairness, affected people, reversibility, and longer-term effects.</p></div></article><article class="step"><div class="num">05</div><div><h3 data-translate>Review and decide</h3><p data-translate>Check assumptions, identify missing information, document reasons, and decide whether expert advice or team discussion is needed.</p></div></article><a class="btn btn-primary" href="/decision.html" data-translate>Start your decision review →</a></div></section></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/index.html
+==========================================================================================
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>Home | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body>
 <header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
 <main>
@@ -6,3 +340,550 @@
 <section class="section"><div class="wrap"><div class="section-head"><div><div class="eyebrow" data-translate>One platform, many contexts</div><h2 data-translate>Bring structure to your most important decisions.</h2></div><p data-translate>Whether the choice is personal, organizational, or community-wide, start by understanding the situation—not just the most attractive option.</p></div><div class="grid-3"><article class="card"><div class="card-icon">◈</div><h3 data-translate>Context-first thinking</h3><p data-translate>Record the situation, objectives, limits, and people who may be affected.</p><a class="card-link" href="/how-it-works.html" data-translate>See the process →</a></article><article class="card"><div class="card-icon">⇄</div><h3 data-translate>Compare alternatives</h3><p data-translate>Explore several options and consider costs, risks, feasibility, and possible outcomes.</p><a class="card-link" href="/decision.html" data-translate>Open workspace →</a></article><article class="card"><div class="card-icon">⌘</div><h3 data-translate>Work together</h3><p data-translate>Plan for thoughtful team collaboration and clearer decisions.</p><a class="card-link" href="/messages.html" data-translate>Open messaging →</a></article></div></div></section>
 <section class="section"><div class="wrap"><div class="section-head"><div><div class="eyebrow" data-translate>Decision categories</div><h2 data-translate>Start with the kind of decision you face.</h2></div><p data-translate>Select a category to open the decision workspace. The category organizes your review; it does not automatically determine the right answer.</p></div><div class="categories"><a class="category" href="/decision.html?category=Business"><div class="card-icon">▦</div><b data-translate>Business</b><small data-translate>Strategy and operations</small></a><a class="category" href="/decision.html?category=Finance"><div class="card-icon">◉</div><b data-translate>Finance</b><small data-translate>Budgets and resources</small></a><a class="category" href="/decision.html?category=Social"><div class="card-icon">♧</div><b data-translate>Social</b><small data-translate>Community and relationships</small></a><a class="category" href="/decision.html?category=Education"><div class="card-icon">⌂</div><b data-translate>Education</b><small data-translate>Learning and schools</small></a><a class="category" href="/decision.html?category=Technology"><div class="card-icon">⌘</div><b data-translate>Technology</b><small data-translate>Digital projects and tools</small></a><a class="category" href="/decision.html?category=Health"><div class="card-icon">＋</div><b data-translate>Health</b><small data-translate>Wellbeing and care</small></a><a class="category" href="/decision.html?category=Government"><div class="card-icon">▤</div><b data-translate>Government</b><small data-translate>Public services and policy</small></a><a class="category" href="/decision.html?category=Other"><div class="card-icon">•••</div><b data-translate>Other</b><small data-translate>Any other decision</small></a></div></div></section>
 <section class="section"><div class="wrap"><div class="cta"><div><h2 data-translate>Make space for better questions before choosing an answer.</h2><p data-translate>Start with your context, identify alternatives, and review what each path could mean.</p></div><a class="btn" href="/decision.html" data-translate>Open DecisionWise workspace →</a></div></div></section></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/js/auth-app.js
+==========================================================================================
+(function () {
+  const status = document.getElementById('authStatus');
+  const signInForm = document.getElementById('signInForm');
+  const signUpForm = document.getElementById('signUpForm');
+  if (!status || !signInForm || !signUpForm) return;
+
+  function configReady() {
+    return window.supabase && window.DECISIONWISE_SUPABASE_URL &&
+      window.DECISIONWISE_SUPABASE_ANON_KEY &&
+      !window.DECISIONWISE_SUPABASE_URL.includes('YOUR_PROJECT_ID') &&
+      !window.DECISIONWISE_SUPABASE_ANON_KEY.includes('YOUR_SUPABASE_ANON_KEY');
+  }
+  if (!configReady()) {
+    status.textContent = 'Setup required: add your Supabase Project URL and anon/public key in public/js/supabase-config.js first.';
+    status.style.color = 'var(--muted)';
+    signInForm.querySelector('button').disabled = true;
+    signUpForm.querySelector('button').disabled = true;
+    return;
+  }
+  const client = window.supabase.createClient(window.DECISIONWISE_SUPABASE_URL, window.DECISIONWISE_SUPABASE_ANON_KEY);
+  function show(message, isError) {
+    status.textContent = message;
+    status.style.color = isError ? '#c2413b' : 'var(--accent)';
+  }
+  function friendlyError(error) {
+    const message = (error && error.message) || 'Something went wrong. Please try again.';
+    if (/user already registered/i.test(message)) return 'An account with this email already exists. Try signing in.';
+    if (/invalid login credentials/i.test(message)) return 'Email or password is incorrect.';
+    if (/username/i.test(message) && /duplicate|unique/i.test(message)) return 'That username is already taken. Choose another one.';
+    return message;
+  }
+  signInForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = signInForm.querySelector('button[type="submit"]');
+    button.disabled = true; show('Signing in…');
+    const email = document.getElementById('signInEmail').value.trim();
+    const password = document.getElementById('signInPassword').value;
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    button.disabled = false;
+    if (error) return show(friendlyError(error), true);
+    show('Signed in successfully. Opening your messages…');
+    window.location.assign('/messages.html');
+  });
+  signUpForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = signUpForm.querySelector('button[type="submit"]');
+    button.disabled = true; show('Creating your account…');
+    const displayName = document.getElementById('signUpName').value.trim();
+    const username = document.getElementById('signUpUsername').value.trim().toLowerCase();
+    const email = document.getElementById('signUpEmail').value.trim();
+    const password = document.getElementById('signUpPassword').value;
+    if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+      button.disabled = false; return show('Username must be 3–24 characters and use only letters, numbers, or underscores.', true);
+    }
+    const { data, error } = await client.auth.signUp({
+      email, password,
+      options: { data: { display_name: displayName, username } }
+    });
+    button.disabled = false;
+    if (error) return show(friendlyError(error), true);
+    if (data.session) {
+      show('Account created. Opening your messages…');
+      window.location.assign('/messages.html');
+    } else {
+      show('Account request received. Check your email for a verification link, then sign in. If no email arrives, check your Supabase Auth email settings.');
+      signUpForm.reset();
+    }
+  });
+  client.auth.getSession().then(({ data }) => {
+    if (data.session) show('You are already signed in. Open the messaging page to continue.');
+  });
+})();
+
+
+==========================================================================================
+FILE: public/js/main.js
+==========================================================================================
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+function updateThemeButton(){const b=$("#themeToggle");if(!b)return;const dark=document.documentElement.dataset.theme==="dark";b.textContent=dark?"☀":"☾";b.title=dark?"Light mode":"Dark mode"}
+document.documentElement.dataset.theme=localStorage.getItem("dw-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");updateThemeButton();
+$("#themeToggle")?.addEventListener("click",()=>{const t=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=t;localStorage.setItem("dw-theme",t);updateThemeButton()});
+$("#menuToggle")?.addEventListener("click",()=>{const open=$("#primaryNav")?.classList.toggle("open");$("#menuToggle")?.setAttribute("aria-expanded",String(!!open))});
+const original=new Map();$$("[data-translate]").forEach((el,i)=>{el.dataset.translationId=String(i);original.set(String(i),el.textContent.trim())});
+const language=$("#languageSelect"), notice=$("#translationNotice");
+async function translate(target){
+ if(!target||target==="en"){original.forEach((v,id)=>{const e=document.querySelector(`[data-translation-id="${id}"]`);if(e)e.textContent=v});if(notice)notice.textContent="";return}
+ const els=$$("[data-translate]"), texts=els.map(e=>original.get(e.dataset.translationId)||e.textContent.trim());
+ if(notice)notice.textContent="Translating page…";
+ try{const r=await fetch("/api/translate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({texts,source:"en",target})});const d=await r.json();if(!r.ok)throw Error(d.error||"Translation failed");els.forEach((e,i)=>e.textContent=d.translations[i]);if(notice)notice.textContent=target==="rw"?"Translated to Kinyarwanda by Google Cloud Translation.":"Traduit en français par Google Cloud Translation."}
+ catch(e){if(notice)notice.textContent=e.message}
+}
+language?.addEventListener("change",()=>{localStorage.setItem("dw-language",language.value);translate(language.value)});
+if(language){language.value=localStorage.getItem("dw-language")||"en";if(language.value!=="en")translate(language.value)}
+const current=location.pathname.split("/").pop()||"index.html";$$("[data-nav]").forEach(a=>{if(a.getAttribute("href")===current)a.classList.add("active")});
+$("#decisionForm")?.addEventListener("submit",e=>{e.preventDefault();const result=$("#decisionResult");result.replaceChildren();result.classList.remove("hidden");const h=document.createElement("h3");h.textContent="Decision review checklist";result.append(h);const values=[["Decision",$("#decisionTitle").value],["Category",$("#decisionCategory").value],["Situation",$("#decisionSituation").value],["Desired outcome",$("#decisionGoal").value],["Options",$("#decisionOptions").value],["Next step","Compare benefits, costs, risks, feasibility, affected people, and long-term consequences."]];for(const [label,value] of values){const p=document.createElement("p"),b=document.createElement("strong");b.textContent=label+": ";p.append(b,document.createTextNode(value));result.append(p)}const n=document.createElement("div");n.className="note";n.textContent="This is an organized worksheet, not an AI-generated recommendation. Check facts and seek qualified advice for high-impact decisions.";result.append(n)});
+$$("[data-demo]").forEach(b=>b.addEventListener("click",()=>{const t=$(b.dataset.demoTarget||"#demoNotice");if(t){t.textContent=b.dataset.demoMessage||"This is a front-end preview; backend functionality is not connected yet.";t.classList.remove("hidden")}}));
+$$("[data-language]").forEach(b=>b.addEventListener("click",()=>{if(language){language.value=b.dataset.language;language.dispatchEvent(new Event("change"))}}));
+
+
+==========================================================================================
+FILE: public/js/messages-app.js
+==========================================================================================
+(function () {
+  const el = (id) => document.getElementById(id);
+  const setupNotice = el('messagingSetupNotice');
+  if (!setupNotice) return;
+  const authGate = el('messageAuthGate');
+  const app = el('messageApp');
+  const status = el('messageStatus');
+  const search = el('peopleSearch');
+  const peopleResults = el('peopleResults');
+  const conversationList = el('conversationList');
+  const threadEmpty = el('threadEmpty');
+  const threadPanel = el('threadPanel');
+  const history = el('messageHistory');
+  const sendForm = el('sendMessageForm');
+  const messageInput = el('messageInput');
+  let client, currentUser, activeConversationId = null, activeOtherUserId = null;
+  let messageSubscription = null, searchTimer = null, conversations = [];
+  const configured = () => window.supabase && window.DECISIONWISE_SUPABASE_URL && window.DECISIONWISE_SUPABASE_ANON_KEY &&
+    !window.DECISIONWISE_SUPABASE_URL.includes('YOUR_PROJECT_ID') &&
+    !window.DECISIONWISE_SUPABASE_ANON_KEY.includes('YOUR_SUPABASE_ANON_KEY');
+  const showStatus = (message, error = false) => { status.textContent = message; status.style.color = error ? '#c2413b' : 'var(--accent)'; };
+  const showSetup = (message) => { setupNotice.textContent = message; setupNotice.classList.remove('hidden'); };
+  const clearSetup = () => setupNotice.classList.add('hidden');
+  const escapeText = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[char]));
+  const initials = (value) => (String(value || '?').trim().split(/\s+/).slice(0,2).map(x => x[0] || '').join('').toUpperCase() || '?');
+  const friendly = (error) => {
+    const message = error?.message || 'The request failed. Please try again.';
+    if (/row-level security|permission denied/i.test(message)) return 'The database denied this action. Confirm that you ran the supplied SQL policies and are signed in.';
+    if (/function .* does not exist|schema cache/i.test(message)) return 'Database setup is incomplete. Run supabase/messaging.sql in the Supabase SQL Editor.';
+    return message;
+  };
+  if (!configured()) {
+    showSetup('Setup required: configure public/js/supabase-config.js with your Supabase Project URL and anon/public key, then apply supabase/messaging.sql.');
+    return;
+  }
+  client = window.supabase.createClient(window.DECISIONWISE_SUPABASE_URL, window.DECISIONWISE_SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  });
+
+  async function boot() {
+    const { data, error } = await client.auth.getSession();
+    if (error) { showStatus(friendly(error), true); return; }
+    currentUser = data.session?.user || null;
+    if (!currentUser) {
+      authGate.classList.remove('hidden'); app.classList.add('hidden');
+      showStatus('Sign in to send and receive private messages.');
+      return;
+    }
+    authGate.classList.add('hidden'); app.classList.remove('hidden'); clearSetup();
+    showStatus('Signed in. Messages are stored in your Supabase database.');
+    await loadConversations();
+  }
+
+  async function searchPeople(term) {
+    peopleResults.replaceChildren();
+    const q = term.trim();
+    if (q.length < 2) { peopleResults.innerHTML = '<p class="muted-small">Enter at least 2 characters to find users.</p>'; return; }
+    const safe = q.replace(/[%,()]/g, ' ').trim();
+    if (!safe) return;
+    const [byName, byUsername] = await Promise.all([
+      client.from('profiles').select('id, display_name, username').ilike('display_name', `%${safe}%`).neq('id', currentUser.id).limit(15),
+      client.from('profiles').select('id, display_name, username').ilike('username', `${safe}%`).neq('id', currentUser.id).limit(15)
+    ]);
+    if (byName.error || byUsername.error) { showStatus(friendly(byName.error || byUsername.error), true); return; }
+    const people = new Map();
+    [...(byName.data || []), ...(byUsername.data || [])].forEach(person => people.set(person.id, person));
+    if (!people.size) { peopleResults.innerHTML = '<p class="muted-small">No matching users found.</p>'; return; }
+    [...people.values()].slice(0,15).forEach(person => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'person-result';
+      button.innerHTML = `<span class="person-avatar">${escapeText(initials(person.display_name))}</span><span class="person-details"><strong>${escapeText(person.display_name)}</strong><small>@${escapeText(person.username)}</small></span>`;
+      button.addEventListener('click', () => startConversation(person)); peopleResults.appendChild(button);
+    });
+  }
+
+  async function startConversation(person) {
+    showStatus(`Opening conversation with ${person.display_name}…`);
+    const { data, error } = await client.rpc('create_direct_conversation', { other_user_id: person.id });
+    if (error) { showStatus(friendly(error), true); return; }
+    await loadConversations();
+    await openConversation(data, person.id, person.display_name, person.username);
+  }
+
+  async function loadConversations() {
+    const { data, error } = await client.rpc('list_my_conversations');
+    if (error) { showStatus(friendly(error), true); conversationList.innerHTML = '<p class="muted-small">Could not load conversations.</p>'; return; }
+    conversations = data || [];
+    conversationList.replaceChildren();
+    if (!conversations.length) { conversationList.innerHTML = '<p class="muted-small">No conversations yet. Find a user above to start one.</p>'; return; }
+    conversations.forEach(conversation => {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'conversation-item' + (conversation.conversation_id === activeConversationId ? ' active' : '');
+      const preview = conversation.last_message ? conversation.last_message : 'No messages yet';
+      button.innerHTML = `<span class="person-avatar">${escapeText(initials(conversation.other_display_name))}</span><span class="person-details"><strong>${escapeText(conversation.other_display_name)}</strong><small>${escapeText(preview.length > 52 ? preview.slice(0,52) + '…' : preview)}</small></span>`;
+      button.addEventListener('click', () => openConversation(conversation.conversation_id, conversation.other_user_id, conversation.other_display_name, conversation.other_username));
+      conversationList.appendChild(button);
+    });
+  }
+
+  async function openConversation(conversationId, otherId, displayName, username) {
+    activeConversationId = conversationId; activeOtherUserId = otherId;
+    el('threadTitle').textContent = displayName || 'DecisionWise user';
+    el('threadSubtitle').textContent = username ? `@${username} · Private direct messages` : 'Private direct messages';
+    threadEmpty.classList.add('hidden'); threadPanel.classList.remove('hidden');
+    history.replaceChildren();
+    if (messageSubscription) { await client.removeChannel(messageSubscription); messageSubscription = null; }
+    const { data, error } = await client.from('messages').select('id, conversation_id, sender_id, body, created_at').eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(200);
+    if (error) { showStatus(friendly(error), true); return; }
+    (data || []).forEach(renderMessage);
+    scrollHistory(); await loadConversations();
+    messageSubscription = client.channel(`messages-${conversationId}-${currentUser.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => {
+        if (payload.new && payload.new.sender_id !== currentUser.id) renderMessage(payload.new);
+        loadConversations();
+      }).subscribe((state) => {
+        if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') showStatus('Live updates are not connected. Refresh the conversation to check for new messages.', true);
+      });
+    showStatus(`Conversation with ${displayName} opened.`);
+    messageInput.focus();
+  }
+
+  function renderMessage(message) {
+    if (history.querySelector(`[data-message-id="${CSS.escape(String(message.id))}"]`)) return;
+    const article = document.createElement('article');
+    article.className = 'chat-message' + (message.sender_id === currentUser.id ? ' mine' : '');
+    article.dataset.messageId = message.id;
+    const time = new Date(message.created_at);
+    const timestamp = Number.isNaN(time.getTime()) ? '' : time.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+    article.innerHTML = `${escapeText(message.body)}<span class="chat-meta">${message.sender_id === currentUser.id ? 'You' : 'Contact'} · ${escapeText(timestamp)}</span>`;
+    history.appendChild(article); scrollHistory();
+  }
+  function scrollHistory() { history.scrollTop = history.scrollHeight; }
+
+  sendForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!activeConversationId || !currentUser) return showStatus('Open a conversation first.', true);
+    const body = messageInput.value.trim();
+    if (!body) return;
+    const button = sendForm.querySelector('button'); button.disabled = true;
+    const { data, error } = await client.from('messages').insert({ conversation_id: activeConversationId, sender_id: currentUser.id, body }).select('id, conversation_id, sender_id, body, created_at').single();
+    button.disabled = false;
+    if (error) return showStatus(friendly(error), true);
+    renderMessage(data); messageInput.value = ''; messageInput.focus(); await loadConversations(); showStatus('Message sent and saved.');
+  });
+  search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => searchPeople(search.value), 250); });
+  el('refreshConversations').addEventListener('click', loadConversations);
+  el('messageSignOut').addEventListener('click', async () => {
+    const { error } = await client.auth.signOut();
+    if (error) return showStatus(friendly(error), true);
+    if (messageSubscription) await client.removeChannel(messageSubscription);
+    activeConversationId = null; activeOtherUserId = null;
+    app.classList.add('hidden'); authGate.classList.remove('hidden'); showStatus('You have signed out.');
+  });
+  client.auth.onAuthStateChange((_event, session) => {
+    if (!session) { currentUser = null; app.classList.add('hidden'); authGate.classList.remove('hidden'); }
+  });
+  boot();
+})();
+
+
+==========================================================================================
+FILE: public/js/supabase-config.js
+==========================================================================================
+// Public Supabase project settings. These are safe to expose in a browser ONLY when Row Level Security is enabled.
+// Replace both values with your Supabase Project URL and anon/public key. Never put a service_role key here.
+window.DECISIONWISE_SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
+window.DECISIONWISE_SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+
+==========================================================================================
+FILE: public/languages.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>Languages | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main><section class="page-hero"><div class="wrap"><div class="crumb" data-translate>Home / Languages</div><div class="eyebrow" data-translate>Language access</div><h1 data-translate>Use DecisionWise in a language you understand.</h1><p data-translate>Choose a language in the header to translate marked page text using Google Cloud Translation. Machine translation may make mistakes; review important wording carefully.</p></div></section><section class="section"><div class="wrap grid-3"><article class="card"><div class="card-icon">EN</div><h3>English</h3><p data-translate>Original language for this starter website.</p><button class="btn btn-secondary" data-language="en" data-translate>Use English</button></article><article class="card"><div class="card-icon">RW</div><h3>Kinyarwanda</h3><p data-translate>Machine translation helps Kinyarwanda speakers access the platform.</p><button class="btn btn-secondary" data-language="rw" data-translate>Use Kinyarwanda</button></article><article class="card"><div class="card-icon">FR</div><h3>Français</h3><p data-translate>Machine translation helps French-speaking users understand the interface.</p><button class="btn btn-secondary" data-language="fr" data-translate>Use French</button></article></div><div class="wrap" style="margin-top:20px"><div class="note" data-translate>Setup required: create a Google Cloud project, enable Cloud Translation API, configure billing as required, and keep the API key in the server .env file. Never publish your key in browser code.</div></div></section></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/login.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>Login | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script><script defer src="/js/supabase-config.js"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script defer src="/js/auth-app.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main><section class="page-hero"><div class="wrap"><div class="crumb">Home / Account access</div><div class="eyebrow">Secure account access</div><h1>Welcome to DecisionWise.</h1><p>Create an account or sign in to use private messaging. Authentication is handled by Supabase Auth; you must configure your own Supabase project before it works.</p></div></section>
+<section class="section"><div class="wrap"><div class="grid-2 auth-grid"><div class="card"><h2>Sign in</h2><form id="signInForm"><div class="field"><label for="signInEmail">Email address</label><input id="signInEmail" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"></div><div class="field"><label for="signInPassword">Password</label><input id="signInPassword" type="password" autocomplete="current-password" required minlength="8" maxlength="128" placeholder="Your password"></div><button class="btn btn-primary" type="submit">Sign in</button></form></div><div class="card"><h2>Create an account</h2><form id="signUpForm"><div class="field"><label for="signUpName">Display name</label><input id="signUpName" type="text" autocomplete="name" required minlength="2" maxlength="60" placeholder="How others will see you"></div><div class="field"><label for="signUpUsername">Username</label><input id="signUpUsername" type="text" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" placeholder="letters, numbers, underscores"><small class="muted-small">Your username is visible to signed-in users.</small></div><div class="field"><label for="signUpEmail">Email address</label><input id="signUpEmail" type="email" autocomplete="email" required maxlength="254" placeholder="you@example.com"></div><div class="field"><label for="signUpPassword">Password</label><input id="signUpPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128" placeholder="At least 8 characters"></div><button class="btn btn-primary" type="submit">Create account</button></form></div></div><div id="authStatus" class="status" role="status" aria-live="polite"></div><div class="note" style="margin-top:18px">Use a unique password. Depending on your Supabase Auth settings, new accounts may need to verify their email before signing in. Never publish your Supabase service-role key.</div></div></section></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: public/messages.html
+==========================================================================================
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="DecisionWise helps people and organizations examine decisions with context, options, risks and consequences."><title>Messaging | DecisionWise</title><link rel="stylesheet" href="/css/style.css"><script defer src="/js/main.js"></script><script defer src="/js/supabase-config.js"></script><script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script defer src="/js/messages-app.js"></script></head><body>
+<header><div class="wrap navbar"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><nav id="primaryNav" aria-label="Main navigation"><a href="/index.html" data-nav="index.html" data-translate>Home</a><a href="/how-it-works.html" data-nav="how-it-works.html" data-translate>How it works</a><a href="/decision.html" data-nav="decision.html" data-translate>Decision workspace</a><a href="/accounts.html" data-nav="accounts.html" data-translate>Accounts</a><a href="/messages.html" data-nav="messages.html" data-translate>Messaging</a><a href="/about.html" data-nav="about.html" data-translate>About us</a><a href="/languages.html" data-nav="languages.html" data-translate>Languages</a><a href="/categories.html" data-nav="categories.html" data-translate>Categories</a></nav><div class="nav-actions"><select id="languageSelect" class="lang-select" aria-label="Choose language"><option value="en">English</option><option value="rw">Kinyarwanda</option><option value="fr">Français</option></select><button id="themeToggle" class="theme-button" type="button" aria-label="Toggle theme">☾</button><a class="btn btn-primary btn-small" href="/login.html" data-translate>Log in</a><button id="menuToggle" class="menu-button" type="button" aria-expanded="false" aria-controls="primaryNav" aria-label="Open menu">☰</button></div></div></header>
+<main>
+<section class="page-hero"><div class="wrap"><div class="crumb">Home / Messaging</div><div class="eyebrow">Private communication</div><h1>Conversations that stay connected.</h1><p>Send direct messages to other DecisionWise users. Messages are stored in your configured database and update live while the page is open.</p></div></section>
+<section class="section"><div class="wrap">
+<div id="messagingSetupNotice" class="note" role="status">Messaging setup is required: configure Supabase and apply the database SQL from the project folder.</div>
+<div id="messageAuthGate" class="card form-card" style="margin-bottom:18px"><h2>Sign in to message</h2><p>Use your DecisionWise account. If you do not have one yet, create an account on the login page.</p><a class="btn btn-primary" href="/login.html">Go to login</a></div>
+<div id="messageApp" class="message-layout hidden">
+<aside class="message-side"><div class="conversation-head"><h3>Conversations</h3><button id="refreshConversations" class="btn btn-secondary btn-small" type="button" aria-label="Refresh conversations">↻</button></div>
+<div class="field"><label for="peopleSearch">Find a DecisionWise user</label><input id="peopleSearch" type="search" maxlength="80" placeholder="Search display names or usernames"></div><div id="peopleResults" class="people-results" aria-live="polite"></div><hr class="message-rule"><div id="conversationList" class="conversation-list"><p class="muted-small">Your conversations will appear here.</p></div><button id="messageSignOut" class="btn btn-secondary btn-small" type="button">Sign out</button></aside>
+<section class="message-thread"><div id="threadEmpty" class="message-main"><div class="message-icon">✉</div><h2>Select a conversation</h2><p>Choose a person from search or open an existing conversation.</p></div>
+<div id="threadPanel" class="thread-panel hidden"><div class="thread-heading"><div><h2 id="threadTitle">Conversation</h2><p id="threadSubtitle">Private direct messages</p></div><span class="role">DIRECT MESSAGE</span></div><div id="messageHistory" class="message-history" role="log" aria-live="polite" aria-relevant="additions text"></div><form id="sendMessageForm" class="send-message-form"><label class="sr-only" for="messageInput">Write a message</label><textarea id="messageInput" maxlength="4000" rows="2" placeholder="Write a message…" required></textarea><button class="btn btn-primary" type="submit">Send</button></form><p class="muted-small">Avoid sharing passwords or highly sensitive personal information.</p></div></section>
+</div><div id="messageStatus" class="status" role="status" aria-live="polite"></div>
+<div class="note" style="margin-top:18px">Privacy: conversations require sign-in and database access policies. Users can discover display names and usernames in the directory. Do not use this starter for confidential or emergency communications without a security review.</div>
+</div></section></main><footer class="footer"><div class="wrap footer-inner"><a class="brand" href="/index.html"><span class="brand-mark">D</span><span>Decision<span>Wise</span></span></a><small data-translate>Thoughtful decisions start with the whole picture.</small><div class="footer-links"><a href="/how-it-works.html" data-translate>How it works</a><a href="/languages.html" data-translate>Languages</a><a href="/about.html" data-translate>About us</a><a href="/login.html" data-translate>Login</a></div></div><div class="wrap"><div id="translationNotice" class="translation-notice" role="status" aria-live="polite"></div></div></footer></body></html>
+
+==========================================================================================
+FILE: supabase/messaging.sql
+==========================================================================================
+-- DecisionWise direct messaging schema for Supabase (PostgreSQL).
+-- Run the entire file in Supabase Dashboard -> SQL Editor.
+-- Row Level Security is enabled on every exposed table. Never use the service_role key in the browser.
+
+create extension if not exists pgcrypto;
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null check (char_length(display_name) between 2 and 60),
+  username text not null check (char_length(username) between 3 and 24 and username ~ '^[a-zA-Z0-9_]+$'),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists profiles_username_lower_unique on public.profiles (lower(username));
+
+create table if not exists public.conversations (
+  id uuid primary key default gen_random_uuid(),
+  direct_key text not null unique,
+  created_by uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.conversation_members (
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  primary key (conversation_id, user_id)
+);
+
+create table if not exists public.messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  sender_id uuid not null references auth.users(id) on delete cascade,
+  body text not null check (char_length(trim(body)) between 1 and 4000),
+  created_at timestamptz not null default now()
+);
+create index if not exists messages_conversation_created_idx on public.messages (conversation_id, created_at);
+create index if not exists conversation_members_user_idx on public.conversation_members (user_id, conversation_id);
+
+-- Create a profile automatically when a new Auth user signs up.
+create or replace function public.handle_new_decisionwise_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  requested_name text;
+  requested_username text;
+  candidate_username text;
+  suffix_length integer := 6;
+begin
+  requested_name := coalesce(nullif(trim(new.raw_user_meta_data ->> 'display_name'), ''), split_part(new.email, '@', 1));
+  requested_username := lower(coalesce(nullif(trim(new.raw_user_meta_data ->> 'username'), ''), 'user_' || substr(replace(new.id::text, '-', ''), 1, 8)));
+  candidate_username := left(requested_username, 24);
+  -- Avoid making account creation fail if the requested username is already taken.
+  while exists (select 1 from public.profiles p where lower(p.username) = lower(candidate_username)) loop
+    candidate_username := left(requested_username, 23 - suffix_length) || '_' || substr(replace(new.id::text, '-', ''), 1, suffix_length);
+    suffix_length := least(suffix_length + 2, 32);
+    if suffix_length = 32 and exists (select 1 from public.profiles p where lower(p.username) = lower(candidate_username)) then
+      candidate_username := 'user_' || replace(new.id::text, '-', '');
+      exit;
+    end if;
+  end loop;
+  insert into public.profiles (id, display_name, username)
+  values (new.id, left(requested_name, 60), left(candidate_username, 24));
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created_decisionwise on auth.users;
+create trigger on_auth_user_created_decisionwise
+after insert on auth.users
+for each row execute procedure public.handle_new_decisionwise_user();
+
+-- Keep conversation order current when a message is inserted.
+create or replace function public.touch_conversation_updated_at()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.conversations set updated_at = new.created_at where id = new.conversation_id;
+  return new;
+end;
+$$;
+drop trigger if exists on_message_insert_touch_conversation on public.messages;
+create trigger on_message_insert_touch_conversation
+after insert on public.messages
+for each row execute procedure public.touch_conversation_updated_at();
+
+alter table public.profiles enable row level security;
+alter table public.conversations enable row level security;
+alter table public.conversation_members enable row level security;
+alter table public.messages enable row level security;
+
+drop policy if exists "Signed-in users can discover profiles" on public.profiles;
+create policy "Signed-in users can discover profiles" on public.profiles
+for select to authenticated using (auth.uid() is not null);
+drop policy if exists "Users can update their own profile" on public.profiles;
+create policy "Users can update their own profile" on public.profiles
+for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+
+-- A user can read only their own membership row. RPC below securely returns the other participant's display info.
+drop policy if exists "Users can read own memberships" on public.conversation_members;
+create policy "Users can read own memberships" on public.conversation_members
+for select to authenticated using (user_id = auth.uid());
+
+drop policy if exists "Members can read their conversations" on public.conversations;
+create policy "Members can read their conversations" on public.conversations
+for select to authenticated using (
+  exists (select 1 from public.conversation_members cm where cm.conversation_id = conversations.id and cm.user_id = auth.uid())
+);
+
+drop policy if exists "Members can read messages" on public.messages;
+create policy "Members can read messages" on public.messages
+for select to authenticated using (
+  exists (select 1 from public.conversation_members cm where cm.conversation_id = messages.conversation_id and cm.user_id = auth.uid())
+);
+drop policy if exists "Members can send as themselves" on public.messages;
+create policy "Members can send as themselves" on public.messages
+for insert to authenticated with check (
+  sender_id = auth.uid() and exists (
+    select 1 from public.conversation_members cm where cm.conversation_id = messages.conversation_id and cm.user_id = auth.uid()
+  )
+);
+
+-- Server-side, authenticated RPC creates a direct conversation without exposing membership-management permissions.
+create or replace function public.create_direct_conversation(other_user_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  me uuid := auth.uid();
+  pair_key text;
+  new_conversation_id uuid;
+begin
+  if me is null then raise exception 'You must sign in first.'; end if;
+  if other_user_id is null or other_user_id = me then raise exception 'Choose another user.'; end if;
+  if not exists (select 1 from public.profiles p where p.id = other_user_id) then raise exception 'User not found.'; end if;
+  pair_key := least(me::text, other_user_id::text) || ':' || greatest(me::text, other_user_id::text);
+  insert into public.conversations (direct_key, created_by)
+  values (pair_key, me)
+  on conflict (direct_key) do nothing;
+  select c.id into new_conversation_id from public.conversations c where c.direct_key = pair_key;
+  insert into public.conversation_members (conversation_id, user_id)
+  values (new_conversation_id, me), (new_conversation_id, other_user_id)
+  on conflict do nothing;
+  return new_conversation_id;
+end;
+$$;
+
+-- Secure conversation-list RPC; returns only conversations in which the caller is a member.
+create or replace function public.list_my_conversations()
+returns table (
+  conversation_id uuid,
+  other_user_id uuid,
+  other_display_name text,
+  other_username text,
+  updated_at timestamptz,
+  last_message text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select c.id,
+         other_profile.id,
+         other_profile.display_name,
+         other_profile.username,
+         c.updated_at,
+         latest.body
+  from public.conversations c
+  join public.conversation_members mine on mine.conversation_id = c.id and mine.user_id = auth.uid()
+  join public.conversation_members theirs on theirs.conversation_id = c.id and theirs.user_id <> auth.uid()
+  join public.profiles other_profile on other_profile.id = theirs.user_id
+  left join lateral (
+    select m.body from public.messages m
+    where m.conversation_id = c.id
+    order by m.created_at desc limit 1
+  ) latest on true
+  where auth.uid() is not null
+  order by c.updated_at desc;
+$$;
+
+revoke all on function public.create_direct_conversation(uuid) from public;
+revoke all on function public.list_my_conversations() from public;
+grant execute on function public.create_direct_conversation(uuid) to authenticated;
+grant execute on function public.list_my_conversations() to authenticated;
+
+grant select on public.profiles to authenticated;
+grant update (display_name, username) on public.profiles to authenticated;
+grant select on public.conversations to authenticated;
+grant select on public.conversation_members to authenticated;
+grant select, insert on public.messages to authenticated;
+
+-- Enable Realtime for new messages, if it is not already enabled.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'messages'
+  ) then
+    alter publication supabase_realtime add table public.messages;
+  end if;
+end $$;
+
+
+==========================================================================================
+FILE: vercel.json
+==========================================================================================
+{
+  "version": 2,
+  "outputDirectory": "public",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://translation.googleapis.com https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" }
+      ]
+    }
+  ],
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 20
+    }
+  }
+}
+
